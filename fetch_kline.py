@@ -221,6 +221,53 @@ def get_kline(
     else:
         raise ValueError("datasource 仅支持 'tushare', 'akshare' 或 'mootdx'")
 
+# ---------- 分时数据抓取 ---------- #
+def get_minutes(code: str, start: str, end: str, datasource: str) -> pd.DataFrame:
+    """
+    获取指定股票在[start, end]区间的分钟级别数据，datasource 仅支持 mootdx。
+    返回 DataFrame，包含 date, open, close, high, low, volume。
+    """
+    if datasource != "mootdx":
+        logger.warning("分钟级别数据目前仅支持 mootdx 数据源")
+        return pd.DataFrame()
+
+    client = Quotes.factory(market="std")
+    symbol = code.zfill(6)
+    start_dt = pd.to_datetime(start, format="%Y%m%d")
+    end_dt = pd.to_datetime(end, format="%Y%m%d")
+    all_days = pd.date_range(start_dt, end_dt, freq="B")  # 只取工作日
+
+    dfs = []
+    for day in all_days:
+        date_str = day.strftime("%Y%m%d")
+        try:
+            df = client.minutes(symbol=symbol, date=date_str)
+            if df is None or df.empty:
+                continue
+
+            # 生成对应的时间索引
+            morning_times = pd.date_range(f"{date_str} 09:30", f"{date_str} 11:29", freq="T")
+            afternoon_times = pd.date_range(f"{date_str} 13:00", f"{date_str} 14:59", freq="T")
+            all_times = morning_times.append(afternoon_times)
+
+            if len(df) != len(all_times):
+                logger.warning("分钟数据长度不符: %s %s", code, date_str)
+                continue
+
+            df.index = all_times
+            df = df[["price", "volume"]].copy()
+            df["date"] = df.index
+            dfs.append(df)
+        except Exception as e:
+            logger.warning("获取分钟数据失败: %s %s %s", code, date_str, e)
+            continue
+
+    if not dfs:
+        return pd.DataFrame()
+    result = pd.concat(dfs, ignore_index=True)
+    result = result[["date", "price", "volume"]]
+    return result
+
 # ---------- 数据校验 ---------- #
 
 def validate(df: pd.DataFrame) -> pd.DataFrame:
@@ -281,11 +328,26 @@ def fetch_one(
             new_df.to_csv(csv_path, index=False)
             break
         except Exception:
-            logger.exception("%s 第 %d 次抓取失败", code, attempt)
+            logger.exception("%s 第 %d 次取失败", code, attempt)
             time.sleep(random.uniform(1, 3) * attempt)  # 指数退避
     else:
         logger.error("%s 三次抓取均失败，已跳过！", code)
 
+    # 添加分时图获取并保存
+    minutes_csv_path = out_dir / f"{code}_minutes.csv"
+    df_minutes = get_minutes(code, start, end, datasource)
+    if not df_minutes.empty:
+        df_minutes = validate(df_minutes)
+        if minutes_csv_path.exists() and incremental:
+            old_minutes = pd.read_csv(minutes_csv_path, parse_dates=["date"])
+            old_minutes = drop_dup_columns(old_minutes)
+            df_minutes = drop_dup_columns(df_minutes)
+            df_minutes = (
+                pd.concat([old_minutes, df_minutes], ignore_index=True)
+                .drop_duplicates(subset="date")
+                .sort_values("date")
+            )
+        df_minutes.to_csv(minutes_csv_path, index=False)
 
 # ---------- 主入口 ---------- #
 
@@ -355,7 +417,7 @@ def main():
                 args.datasource,
                 args.frequency,
             )
-            for code in codes
+            for code in codes #['603192', '300937', '301287']
         ]
         for _ in tqdm(as_completed(futures), total=len(futures), desc="下载进度"):
             pass
