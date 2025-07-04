@@ -230,24 +230,24 @@ def _get_kline_mootdx(code: str, start: str, end: str, adjust: str, freq_code: i
     df = df.sort_values("date").reset_index(drop=True)
     return df[["date", "open", "close", "high", "low", "volume"]]
 
-# ---------- 通用接口 ---------- #
+# # ---------- 通用接口 ---------- #
 
-def get_kline(
-    code: str,
-    start: str,
-    end: str,
-    adjust: str,
-    datasource: str,
-    freq_code: int = 4,
-) -> pd.DataFrame:
-    if datasource == "tushare":
-        return _get_kline_tushare(code, start, end, adjust)
-    elif datasource == "akshare":
-        return _get_kline_akshare(code, start, end, adjust)
-    elif datasource == "mootdx":        
-        return _get_kline_mootdx(code, start, end, adjust, freq_code)
-    else:
-        raise ValueError("datasource 仅支持 'tushare', 'akshare' 或 'mootdx'")
+# def get_kline(
+#     code: str,
+#     start: str,
+#     end: str,
+#     adjust: str,
+#     datasource: str,
+#     freq_code: int = 4,
+# ) -> pd.DataFrame:
+#     if datasource == "tushare":
+#         return _get_kline_tushare(code, start, end, adjust)
+#     elif datasource == "akshare":
+#         return _get_kline_akshare(code, start, end, adjust)
+#     elif datasource == "mootdx":        
+#         return _get_kline_mootdx(code, start, end, adjust, freq_code)
+#     else:
+#         raise ValueError("datasource 仅支持 'tushare', 'akshare' 或 'mootdx'")
     
 # ---------- 分时数据抓取 ---------- #
 def get_minutes(code: str, start: str, end: str, datasource: str) -> pd.DataFrame:
@@ -437,7 +437,7 @@ def fetch_one(
 
 def main():
     parser = argparse.ArgumentParser(description="按市值筛选 A 股并抓取历史 K 线 – 支持批量模式 (Tushare)")
-    parser.add_argument("--datasource", choices=["tushare", "akshare", "mootdx"], default="tushare", help="历史 K 线数据源")
+    parser.add_argument("--datasource", choices=["tushare", "akshare", "mootdx"], default="mootdx", help="历史 K 线数据源")
     parser.add_argument("--frequency", type=int, choices=list(_FREQ_MAP.keys()), default=4, help="K线频率编码，参见说明 (仅 mootdx 有效)")
     parser.add_argument("--exclude-gem", default=True, help="True则排除创业板/科创板/北交所")
     parser.add_argument("--min-mktcap", type=float, default=5e9, help="最小总市值（含），单位：元")
